@@ -3,6 +3,7 @@ import shutil
 import datetime
 import logging
 from typing import List, Optional, Dict, Any
+from fastapi.staticfiles import StaticFiles
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -86,9 +87,6 @@ app = FastAPI(
 # Health Check Route
 # =========================
 
-@app.get("/")
-def root():
-    return {"status": "ok"}
 
 # =========================
 # CORS Middleware
@@ -458,7 +456,47 @@ def run_analysis_pipeline(
         "architecture": architecture,
         "business_potential": business,
     }
+# =========================
+# Frontend (React/Vite) Serving
+# =========================
 
+FRONTEND_DIST = (
+    Path(__file__).resolve().parent.parent / "frontend" / "dist"
+)
+
+if FRONTEND_DIST.exists():
+
+    assets_dir = FRONTEND_DIST / "assets"
+
+    if assets_dir.exists():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(assets_dir)),
+            name="assets",
+        )
+
+    @app.get("/")
+    async def serve_frontend():
+        return FileResponse(
+            str(FRONTEND_DIST / "index.html")
+        )
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+
+        # FastAPI API routes
+        if full_path.startswith("api"):
+            raise HTTPException(status_code=404)
+
+        requested_file = FRONTEND_DIST / full_path
+
+        if requested_file.exists() and requested_file.is_file():
+            return FileResponse(str(requested_file))
+
+        # React Router fallback
+        return FileResponse(
+            str(FRONTEND_DIST / "index.html")
+        )
 # =========================
 # Run Server
 # =========================
